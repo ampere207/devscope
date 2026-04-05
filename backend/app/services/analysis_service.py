@@ -5,7 +5,9 @@ import networkx as nx
 from app.extractor.dependency_extractor import DependencyExtractor
 from app.graph.graph_builder import GraphBuilder
 from app.parser.repository_parser import RepositoryParser
+from app.services.flow_service import flow_service
 from app.services.github_service import GitHubService
+from app.services.risk_service import risk_service
 
 
 class AnalysisStore:
@@ -79,6 +81,58 @@ class AnalysisService:
             )
 
         return self.graph_builder.get_impact(graph, node), self.graph_builder.get_dependencies(graph, node)
+
+    def get_enhanced_impact(self, analysis_id: str, node: str) -> dict | None:
+        """Return Phase 2 impact details with APIs and flow intersections."""
+        graph_payload = self.store.get(analysis_id)
+        if not graph_payload:
+            return None
+
+        affected_nodes, dependency_nodes = self.get_impact(analysis_id, node)
+        if not affected_nodes and not dependency_nodes and not self._node_exists(graph_payload, node):
+            return None
+
+        full_affected = sorted(set([node, *affected_nodes]))
+        affected_apis = flow_service.detect_affected_apis(graph_payload, full_affected)
+
+        affected_flows: list[list[str]] = []
+        for api_node in affected_apis:
+            for path in flow_service.get_flow_paths(graph_payload, api_node):
+                if any(path_node in full_affected for path_node in path):
+                    affected_flows.append(path)
+
+        return {
+            "node": node,
+            "impact_nodes": affected_nodes,
+            "dependency_nodes": dependency_nodes,
+            "affected_nodes": full_affected,
+            "affected_apis": affected_apis,
+            "affected_flows": sorted(affected_flows),
+        }
+
+    def get_flow(self, analysis_id: str, node: str) -> list[list[str]] | None:
+        graph_payload = self.store.get(analysis_id)
+        if not graph_payload:
+            return None
+
+        if not self._node_exists(graph_payload, node):
+            return None
+
+        return flow_service.get_flow_paths(graph_payload, node)
+
+    def get_risk(self, analysis_id: str, node: str) -> dict | None:
+        graph_payload = self.store.get(analysis_id)
+        if not graph_payload:
+            return None
+
+        if not self._node_exists(graph_payload, node):
+            return None
+
+        return risk_service.score_node_risk(graph_payload, node)
+
+    def _node_exists(self, graph_payload: dict, node: str) -> bool:
+        node_ids = {item.get("id") for item in graph_payload.get("nodes", [])}
+        return node in node_ids
 
 
 analysis_service = AnalysisService()

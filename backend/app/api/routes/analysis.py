@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.schemas import AnalyzeRequest, AnalyzeResponse, ImpactResponse
+from app.models.schemas import AnalyzeRequest, AnalyzeResponse, FlowResponse, ImpactResponse, RiskResponse
 from app.services.analysis_service import analysis_service
 
 router = APIRouter()
@@ -31,8 +31,34 @@ async def get_impact(
     node: str = Query(..., description="Node id to evaluate"),
 ) -> ImpactResponse:
     """Compute impact and reverse dependencies for a graph node."""
-    impact_nodes, dependency_nodes = analysis_service.get_impact(repo_id, node)
-    if not impact_nodes and not dependency_nodes:
+    impact_payload = analysis_service.get_enhanced_impact(repo_id, node)
+    if not impact_payload:
         raise HTTPException(status_code=404, detail="Node or analysis not found")
 
-    return ImpactResponse(node=node, impact_nodes=impact_nodes, dependency_nodes=dependency_nodes)
+    return ImpactResponse(**impact_payload)
+
+
+@router.get("/flow")
+async def get_flow(
+    repo_id: str = Query(..., description="Phase 1 analysis identifier"),
+    node: str = Query(..., description="API or service node"),
+) -> FlowResponse:
+    """Return execution flow paths from an API or service node."""
+    paths = analysis_service.get_flow(repo_id, node)
+    if paths is None:
+        raise HTTPException(status_code=404, detail="Node or analysis not found")
+
+    return FlowResponse(node=node, paths=paths)
+
+
+@router.get("/risk")
+async def get_risk(
+    repo_id: str = Query(..., description="Phase 1 analysis identifier"),
+    node: str = Query(..., description="Node id to evaluate"),
+) -> RiskResponse:
+    """Compute deterministic risk score for a node change."""
+    risk = analysis_service.get_risk(repo_id, node)
+    if not risk:
+        raise HTTPException(status_code=404, detail="Node or analysis not found")
+
+    return RiskResponse(node=node, **risk)
