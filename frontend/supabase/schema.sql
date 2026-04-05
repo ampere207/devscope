@@ -24,8 +24,23 @@ create table if not exists public.analyses (
 
 create index if not exists analyses_repo_id_idx on public.analyses (repo_id);
 
+create table if not exists public.github_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  provider text not null default 'github',
+  access_token text not null,
+  token_type text,
+  scope text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, provider)
+);
+
+create index if not exists github_connections_user_id_idx on public.github_connections (user_id);
+
 alter table public.repositories enable row level security;
 alter table public.analyses enable row level security;
+alter table public.github_connections enable row level security;
 
 create policy if not exists "Users can insert own repositories"
   on public.repositories
@@ -68,3 +83,23 @@ create policy if not exists "Users can view analyses for own repositories"
       where r.id = repo_id and r.user_id = auth.uid()
     )
   );
+
+create policy if not exists "Users can insert own github connections"
+  on public.github_connections
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "Users can view own github connections"
+  on public.github_connections
+  for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "Users can update own github connections"
+  on public.github_connections
+  for update
+  using (auth.uid() = user_id);
+
+create policy if not exists "Users can delete own github connections"
+  on public.github_connections
+  for delete
+  using (auth.uid() = user_id);

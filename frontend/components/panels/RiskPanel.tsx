@@ -44,10 +44,7 @@ export function RiskPanel({ risk, loading }: RiskPanelProps) {
 
       <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-800">AI Explanation</p>
-        <p className="mt-2 text-sm text-cyan-900">
-          AI explanation integration is prepared. In the next step, this panel will include Gemini-generated
-          reasoning that explains why this node is risky in plain language.
-        </p>
+        <p className="mt-2 text-sm text-cyan-900">{risk.ai_explanation || "AI explanation unavailable."}</p>
       </div>
     </div>
   );

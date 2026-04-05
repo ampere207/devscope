@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     app_name: str = "DevScope Backend"
     app_version: str = "0.1.0"
     github_api_base_url: str = "https://api.github.com"
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: str | None = None
+    gemini_api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

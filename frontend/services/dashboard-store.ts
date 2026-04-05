@@ -2,7 +2,18 @@ import { create } from "zustand";
 
 interface DashboardState {
   selectedNodeId: string | null;
-  activeTab: "details" | "impact" | "flow" | "risk" | "query";
+  activeTab:
+    | "details"
+    | "insights"
+    | "impact"
+    | "flow"
+    | "dataflow"
+    | "workflow"
+    | "api"
+    | "risk"
+    | "query"
+    | "simulation"
+    | "diff";
   highlightedNodes: string[];
   setSelectedNode: (nodeId: string | null) => void;
   setActiveTab: (tab: DashboardState["activeTab"]) => void;
