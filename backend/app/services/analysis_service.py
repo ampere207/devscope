@@ -11,6 +11,7 @@ from app.services.dataflow_service import get_dataflow_service
 from app.services.flow_service import flow_service
 from app.services.github_service import GitHubService
 from app.services.risk_service import risk_service
+from app.services.supabase_persistence import supabase_persistence_service
 from app.services.workflow_service import workflow_service
 
 
@@ -36,7 +37,12 @@ class AnalysisStore:
     def get(self, analysis_id: str) -> dict | None:
         record = self._items.get(analysis_id)
         if not record:
-            return None
+            persisted_record = supabase_persistence_service.get_analysis_record(analysis_id)
+            if not persisted_record:
+                return None
+
+            self._items[analysis_id] = persisted_record
+            record = persisted_record
         return record.get("graph")
 
     def get_record(self, analysis_id: str) -> dict | None:
@@ -48,6 +54,17 @@ class AnalysisStore:
             key=lambda item: item.get("created_at", ""),
             reverse=True,
         )
+
+        if len(records) < limit and supabase_persistence_service.is_enabled():
+            persisted_records = supabase_persistence_service.list_analysis_records(limit=limit)
+            merged_records = {item.get("analysis_id", ""): item for item in persisted_records}
+            for record in records:
+                merged_records[record.get("analysis_id", "")] = record
+            records = sorted(
+                merged_records.values(),
+                key=lambda item: item.get("created_at", ""),
+                reverse=True,
+            )
         return records[:limit]
 
 

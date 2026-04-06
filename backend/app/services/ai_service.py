@@ -1,10 +1,14 @@
+import asyncio
 import json
+import logging
 from typing import Any
 
 import httpx
 import networkx as nx
 
 from app.utils.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -54,7 +58,8 @@ class AIService:
 
         prompt = (
             "You are helping engineers assess change risk. "
-            "Explain this risk result in concise plain English and mention blast radius and critical areas. Data:\n"
+            "Explain this risk result in concise plain English. Use complete sentences, avoid markdown, "
+            "and mention blast radius, critical areas, and concrete reasons. Data:\n"
             f"{json.dumps(payload, indent=2)}"
         )
 
@@ -132,20 +137,27 @@ class AIService:
     async def _generate_with_gemini(self, prompt: str, fallback: str) -> str:
         api_key = self._gemini_api_key()
         if not api_key:
+            logger.warning("Gemini API key not configured, using fallback")
             return fallback
 
+        model = self._gemini_model()
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-1.5-flash:generateContent?key={api_key}"
+            f"{model}:generateContent?key={api_key}"
         )
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
+                logger.debug(f"Calling Gemini API with prompt length: {len(prompt)}")
                 response = await client.post(
                     endpoint,
                     json={
                         "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 280},
+                        "generationConfig": {
+                            "temperature": 0.2,
+                            "maxOutputTokens": 1024,
+                            "topP": 0.9,
+                        },
                     },
                 )
                 response.raise_for_status()
@@ -157,14 +169,27 @@ class AIService:
                     .get("text")
                 )
                 if isinstance(text, str) and text.strip():
+                    logger.debug(f"Gemini returned text of length: {len(text)}")
                     return text.strip()
+                logger.warning("Gemini returned empty or invalid response, using fallback")
                 return fallback
-        except Exception:
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Gemini API HTTP error: {e.response.status_code} - {e.response.text}")
+            return fallback
+        except asyncio.TimeoutError:
+            logger.error("Gemini API request timed out, using fallback")
+            return fallback
+        except Exception as e:
+            logger.error(f"Gemini API error: {type(e).__name__}: {str(e)}", exc_info=True)
             return fallback
 
     def _gemini_api_key(self) -> str | None:
         settings = get_settings()
         return getattr(settings, "gemini_api_key", None) or None
+
+    def _gemini_model(self) -> str:
+        settings = get_settings()
+        return getattr(settings, "gemini_model", "gemini-2.5-flash") or "gemini-2.5-flash"
 
     def _fallback_api_explanation(self, payload: dict) -> str:
         api = payload.get("api", "This API")

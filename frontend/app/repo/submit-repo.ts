@@ -166,6 +166,7 @@ export async function analyzeRepositorySubmission(formData: FormData) {
       repo_id: repositoryId,
       graph_data: {
         backend_analysis_id: apiPayload.analysis_id,
+        repo_url: repoUrl,
         nodes: apiPayload.nodes,
         edges: apiPayload.edges,
       },
@@ -184,7 +185,5 @@ export async function analyzeRepositorySubmission(formData: FormData) {
     ? `&warning=${encodeURIComponent(persistenceWarning)}`
     : "";
 
-  redirect(
-    `/dashboard?repo_id=${encodeURIComponent(apiPayload.analysis_id)}&saved_repo_id=${encodeURIComponent(repositoryId || "")}${warningQuery}`,
-  );
+  redirect(`/repo/${encodeURIComponent(apiPayload.analysis_id)}${warningQuery}`);
 }

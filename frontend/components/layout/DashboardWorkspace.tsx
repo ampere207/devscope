@@ -14,6 +14,8 @@ import { QueryPanel } from "@/components/panels/QueryPanel";
 import { RiskPanel } from "@/components/panels/RiskPanel";
 import { SimulationPanel } from "@/components/panels/SimulationPanel";
 import { WorkflowPanel } from "@/components/panels/WorkflowPanel";
+import { RepoManagementModal } from "@/components/layout/RepoManagementModal";
+import { UserProfileModal } from "@/components/layout/UserProfileModal";
 import {
   getAiInsights,
   getApiUnderstanding,
@@ -95,6 +97,11 @@ export function DashboardWorkspace({ userEmail, repoId }: DashboardWorkspaceProp
   const { selectedNodeId, activeTab, highlightedNodes, setSelectedNode, setActiveTab, setHighlightedNodes } =
     useDashboardStore();
 
+  // Modal states
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
+  const [isAnalyzingRepo, setIsAnalyzingRepo] = useState(false);
+
   const [graphView, setGraphView] = useState<(typeof graphViews)[number]["id"]>("graph");
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>(demoNodes);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>(demoEdges);
@@ -102,6 +109,21 @@ export function DashboardWorkspace({ userEmail, repoId }: DashboardWorkspaceProp
     repoId ? "loading" : "idle",
   );
   const [graphError, setGraphError] = useState<string | null>(null);
+
+  // Handle graph view selection - automatically switch to matching right-panel tab
+  useEffect(() => {
+    const viewTabMap: Record<(typeof graphViews)[number]["id"], (typeof tabs)[number]["id"]> = {
+      graph: "details",
+      flow: "flow",
+      dataflow: "dataflow",
+      workflow: "workflow",
+      api: "api",
+      risk: "risk",
+      simulation: "simulation",
+      diff: "diff",
+    };
+    setActiveTab(viewTabMap[graphView]);
+  }, [graphView, setActiveTab]);
 
   const [flowData, setFlowData] = useState<FlowResponse | null>(null);
   const [impactData, setImpactData] = useState<ImpactResponse | null>(null);
@@ -327,20 +349,45 @@ export function DashboardWorkspace({ userEmail, repoId }: DashboardWorkspaceProp
     router.push(`/dashboard?repo_id=${encodeURIComponent(targetAnalysisId)}`);
   }
 
+  async function handleAnalyzeRepo(repoUrl: string) {
+    setIsAnalyzingRepo(true);
+    try {
+      // Call analyze endpoint (you may need to add this to devscope.ts)
+      // For now, we'll just navigate assuming it's already been analyzed
+      // In production, this would trigger the actual analysis
+      console.log("Starting analysis for:", repoUrl);
+      // setIsRepoModalOpen(false);
+      // After analysis completes, refresh the analysis list
+      // and optionally navigate to the new analysis
+    } catch (error) {
+      console.error("Analysis failed:", error);
+    } finally {
+      setIsAnalyzingRepo(false);
+    }
+  }
+
+  function handleSelectRepo(analysisId: string) {
+    router.push(`/dashboard?repo_id=${encodeURIComponent(analysisId)}`);
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-375 flex-1 px-4 py-6 md:px-6">
       <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
         <aside className="panel-card rounded-2xl p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">DevScope</p>
               <p className="mt-1 text-sm text-slate-700">{userEmail}</p>
             </div>
-            <form action={logoutAction}>
-              <button type="submit" className="btn-secondary text-xs">
-                Logout
+            <div className="flex gap-1">
+              <button
+                onClick={() => setIsProfileModalOpen(true)}
+                className="btn-secondary text-xs px-2 py-1"
+                title="Account settings"
+              >
+                ⚙
               </button>
-            </form>
+            </div>
           </div>
 
           <div className="mt-5 rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-xs text-cyan-900">
@@ -357,7 +404,18 @@ export function DashboardWorkspace({ userEmail, repoId }: DashboardWorkspaceProp
 
           <div className="mt-6 space-y-5">
             <section>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Analysis History</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Repositories</p>
+                <button
+                  onClick={() => setIsRepoModalOpen(true)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  Manage
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-600">
+                {analyses.length > 0 ? `${analyses.length} repositories analyzed` : "No analyses yet"}
+              </p>
               <select
                 value={repoId || ""}
                 onChange={(event) => handleSwitchAnalysis(event.target.value)}
@@ -545,6 +603,21 @@ export function DashboardWorkspace({ userEmail, repoId }: DashboardWorkspaceProp
           </div>
         </section>
       </div>
+
+      {/* Modals */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        userEmail={userEmail}
+      />
+      <RepoManagementModal
+        isOpen={isRepoModalOpen}
+        onClose={() => setIsRepoModalOpen(false)}
+        analyses={analyses}
+        onSelectRepo={handleSelectRepo}
+        onAnalyzeRepo={handleAnalyzeRepo}
+        isAnalyzing={isAnalyzingRepo}
+      />
     </main>
   );
 }
