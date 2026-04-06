@@ -66,6 +66,73 @@ const tabs = [
   { id: "risk", label: "Risk" },
 ] as const;
 
+type RiskLevel = RiskResponse["risk_level"];
+
+function buildNodeRiskLevels(nodes: GraphNode[], edges: GraphEdge[]): Record<string, RiskLevel> {
+  const forward = new Map<string, string[]>();
+  const reverse = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    const forwardList = forward.get(edge.source) || [];
+    forwardList.push(edge.target);
+    forward.set(edge.source, forwardList);
+
+    const reverseList = reverse.get(edge.target) || [];
+    reverseList.push(edge.source);
+    reverse.set(edge.target, reverseList);
+  }
+
+  const visit = (start: string, graph: Map<string, string[]>) => {
+    const seen = new Set<string>();
+    const stack = [...(graph.get(start) || [])];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || seen.has(current)) continue;
+      seen.add(current);
+      const neighbors = graph.get(current) || [];
+      for (const neighbor of neighbors) {
+        if (!seen.has(neighbor)) stack.push(neighbor);
+      }
+    }
+
+    return seen;
+  };
+
+  const criticalKeywords = ["auth", "payment", "db", "database", "postgres", "mysql", "redis"];
+  const riskLevels: Record<string, RiskLevel> = {};
+
+  for (const node of nodes) {
+    const descendants = visit(node.id, forward);
+    const ancestors = visit(node.id, reverse);
+    const relevantNodes = new Set([node.id, ...descendants]);
+
+    let criticalHits = 0;
+    for (const candidate of relevantNodes) {
+      const normalized = candidate.toLowerCase();
+      if (criticalKeywords.some((keyword) => normalized.includes(keyword))) {
+        criticalHits += 1;
+      }
+    }
+
+    const blastRadiusScore = Math.min(0.45, descendants.size * 0.06);
+    const criticalScore = Math.min(0.35, criticalHits * 0.12);
+    const apiExposure =
+      node.id.toLowerCase().startsWith("/api") ||
+      node.id.toLowerCase().includes("api") ||
+      Array.from(ancestors).some((ancestor) => {
+        const normalized = ancestor.toLowerCase();
+        return normalized.startsWith("/api") || normalized.includes("api");
+      });
+    const exposureScore = apiExposure ? 0.2 : 0;
+    const score = Math.min(1, blastRadiusScore + criticalScore + exposureScore);
+
+    riskLevels[node.id] = score >= 0.7 ? "HIGH" : score >= 0.4 ? "MEDIUM" : "LOW";
+  }
+
+  return riskLevels;
+}
+
 export function RepoAnalysis({ analysisId }: RepoAnalysisProps) {
   const router = useRouter();
   const { selectedNodeId, activeTab, highlightedNodes, setSelectedNode, setActiveTab, setHighlightedNodes } =
@@ -170,6 +237,8 @@ export function RepoAnalysis({ analysisId }: RepoAnalysisProps) {
     () => graphNodes.filter((node) => !node.id.toLowerCase().includes("api")).map((node) => node.id),
     [graphNodes],
   );
+
+  const nodeRiskLevels = useMemo(() => buildNodeRiskLevels(graphNodes, graphEdges), [graphNodes, graphEdges]);
 
   async function handleSelectNode(nodeId: string) {
     setSelectedNode(nodeId);
@@ -354,6 +423,7 @@ export function RepoAnalysis({ analysisId }: RepoAnalysisProps) {
               highlightedNodes={highlightedNodes}
               selectedNodeId={selectedNodeId}
               dataFlowRecords={dataFlowData?.data_flow}
+              riskLevels={nodeRiskLevels}
               viewMode={graphView === "dataflow" ? "dataflow" : graphView === "flow" ? "flow" : "graph"}
               onNodeClick={handleSelectNode}
             />
